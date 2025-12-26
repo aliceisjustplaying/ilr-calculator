@@ -195,6 +195,17 @@ export function formatTrips(trips: Trip[]): string {
 }
 
 /**
+ * Format the header banner.
+ */
+export function formatHeader(): string {
+  return [
+    "╔═══════════════════════════════════════════════════════════╗",
+    "║              UK ILR Absence Calculator                    ║",
+    "╚═══════════════════════════════════════════════════════════╝",
+  ].join("\n");
+}
+
+/**
  * Format the main summary output.
  */
 export function formatSummary(
@@ -207,9 +218,7 @@ export function formatSummary(
   const sections: string[] = [];
 
   // Header
-  sections.push("╔═══════════════════════════════════════════════════════════╗");
-  sections.push("║              UK ILR Absence Calculator                    ║");
-  sections.push("╚═══════════════════════════════════════════════════════════╝");
+  sections.push(formatHeader());
   sections.push("");
 
   // Trips summary

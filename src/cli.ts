@@ -22,6 +22,7 @@ import {
   formatCapacity,
   formatDateReadable,
   formatForecast,
+  formatHeader,
   formatSimulation,
   formatSummary,
 } from "./formatter";
@@ -252,9 +253,7 @@ async function main(): Promise<void> {
     );
   } else {
     // Show basic capacity
-    console.log("╔═══════════════════════════════════════════════════════════╗");
-    console.log("║              UK ILR Absence Calculator                    ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝");
+    console.log(formatHeader());
     console.log("");
     console.log(formatCapacity(capacity));
 
