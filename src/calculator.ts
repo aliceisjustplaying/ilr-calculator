@@ -9,14 +9,8 @@
  * CRITICAL: These calculations affect ILR eligibility. All logic must be
  * thoroughly tested and verified against known correct values.
  */
-
-import type {
-  CapacityResult,
-  ForecastEntry,
-  SimulationResult,
-  Trip,
-} from "./types";
-import { ABSENCE_LIMIT, WINDOW_DAYS } from "./types";
+import type { CapacityResult, ForecastEntry, SimulationResult, Trip } from './types';
+import { ABSENCE_LIMIT, WINDOW_DAYS } from './types';
 
 /**
  * Calculate the number of absence days for a trip.
@@ -39,11 +33,7 @@ import { ABSENCE_LIMIT, WINDOW_DAYS } from "./types";
  * // dep 1/1, arr 1/2 → 0 days (no full days outside)
  * getAbsenceDays(new Date('2025-01-01'), new Date('2025-01-02')) // → 0
  */
-export function getAbsenceDays(
-  departure: Date,
-  arrival: Date | null,
-  asOfDate?: Date
-): number {
+export function getAbsenceDays(departure: Date, arrival: Date | null, asOfDate?: Date): number {
   // For open trips, use asOfDate as the effective "current" date
   // The person is still abroad, so we count up to (but not including) asOfDate
   const effectiveEnd = arrival ?? asOfDate ?? new Date();
@@ -52,16 +42,8 @@ export function getAbsenceDays(
   const msPerDay = 24 * 60 * 60 * 1000;
 
   // Use UTC to avoid daylight saving issues
-  const depTime = Date.UTC(
-    departure.getUTCFullYear(),
-    departure.getUTCMonth(),
-    departure.getUTCDate()
-  );
-  const arrTime = Date.UTC(
-    effectiveEnd.getUTCFullYear(),
-    effectiveEnd.getUTCMonth(),
-    effectiveEnd.getUTCDate()
-  );
+  const depTime = Date.UTC(departure.getUTCFullYear(), departure.getUTCMonth(), departure.getUTCDate());
+  const arrTime = Date.UTC(effectiveEnd.getUTCFullYear(), effectiveEnd.getUTCMonth(), effectiveEnd.getUTCDate());
 
   // Days between departure and arrival (exclusive of both)
   // If dep=1, arr=3: we want to count only day 2, so (3-1) - 1 = 1
@@ -81,28 +63,14 @@ export function getAbsenceDays(
  * @param asOfDate - For open trips, calculate dates as of this date
  * @returns Array of dates that are absence days
  */
-export function getAbsenceDates(
-  departure: Date,
-  arrival: Date | null,
-  asOfDate?: Date
-): Date[] {
+export function getAbsenceDates(departure: Date, arrival: Date | null, asOfDate?: Date): Date[] {
   const dates: Date[] = [];
   const effectiveEnd = arrival ?? asOfDate ?? new Date();
 
   // Start from day after departure
-  const current = new Date(
-    Date.UTC(
-      departure.getUTCFullYear(),
-      departure.getUTCMonth(),
-      departure.getUTCDate() + 1
-    )
-  );
+  const current = new Date(Date.UTC(departure.getUTCFullYear(), departure.getUTCMonth(), departure.getUTCDate() + 1));
 
-  const endTime = Date.UTC(
-    effectiveEnd.getUTCFullYear(),
-    effectiveEnd.getUTCMonth(),
-    effectiveEnd.getUTCDate()
-  );
+  const endTime = Date.UTC(effectiveEnd.getUTCFullYear(), effectiveEnd.getUTCMonth(), effectiveEnd.getUTCDate());
 
   // Add each day until (but not including) arrival
   while (current.getTime() < endTime) {
@@ -127,25 +95,24 @@ export function getAbsenceDates(
 export function countInWindow(checkDate: Date, trips: Trip[]): number {
   // Window: (checkDate - 365 days, checkDate]
   const windowStart = new Date(
-    Date.UTC(
-      checkDate.getUTCFullYear(),
-      checkDate.getUTCMonth(),
-      checkDate.getUTCDate() - WINDOW_DAYS
-    )
+    Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate() - WINDOW_DAYS),
   );
 
   const windowStartTime = windowStart.getTime();
-  const checkDateTime = Date.UTC(
-    checkDate.getUTCFullYear(),
-    checkDate.getUTCMonth(),
-    checkDate.getUTCDate()
-  );
+  const checkDateTime = Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate());
+
+  // For open trips, cap at today's date (don't assume staying abroad until future checkDate)
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const openTripEndDate = checkDate.getTime() < today.getTime() ? checkDate : today;
 
   let totalDays = 0;
 
   for (const trip of trips) {
     // Get all absence dates for this trip
-    const absenceDates = getAbsenceDates(trip.departure, trip.arrival, checkDate);
+    // For open trips, use the earlier of checkDate or today
+    const effectiveAsOf = trip.arrival === null ? openTripEndDate : checkDate;
+    const absenceDates = getAbsenceDates(trip.departure, trip.arrival, effectiveAsOf);
 
     // Count only dates within the window
     for (const date of absenceDates) {
@@ -190,11 +157,7 @@ export function getCapacity(checkDate: Date, trips: Trip[]): CapacityResult {
  * @param maxSimulationDays - Maximum days to simulate (default: 365)
  * @returns SimulationResult with hit date and max days
  */
-export function simulateContinuousTrip(
-  startDate: Date,
-  trips: Trip[],
-  maxSimulationDays: number = 365
-): SimulationResult {
+export function simulateContinuousTrip(startDate: Date, trips: Trip[], maxSimulationDays = 365): SimulationResult {
   // Build list of completed trips (exclude any open trip since we're simulating from startDate)
   const completedTrips = trips.filter((t) => t.arrival !== null);
 
@@ -203,11 +166,7 @@ export function simulateContinuousTrip(
   while (day <= maxSimulationDays) {
     // Current simulation date
     const simDate = new Date(
-      Date.UTC(
-        startDate.getUTCFullYear(),
-        startDate.getUTCMonth(),
-        startDate.getUTCDate() + day
-      )
+      Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + day),
     );
 
     // Create a hypothetical trip from startDate to simDate
@@ -250,21 +209,11 @@ export function simulateContinuousTrip(
  * @param days - Number of days to forecast
  * @returns Array of ForecastEntry for each day
  */
-export function getCapacityForecast(
-  startDate: Date,
-  trips: Trip[],
-  days: number
-): ForecastEntry[] {
+export function getCapacityForecast(startDate: Date, trips: Trip[], days: number): ForecastEntry[] {
   const forecast: ForecastEntry[] = [];
 
   for (let i = 0; i < days; i++) {
-    const date = new Date(
-      Date.UTC(
-        startDate.getUTCFullYear(),
-        startDate.getUTCMonth(),
-        startDate.getUTCDate() + i
-      )
-    );
+    const date = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + i));
 
     const usedDays = countInWindow(date, trips);
     const availableDays = Math.max(0, ABSENCE_LIMIT - usedDays);
@@ -289,21 +238,11 @@ export function getCapacityForecast(
  * @param maxDays - Maximum days to look ahead
  * @returns Date when capacity next changes, or null if no change within period
  */
-export function getNextCapacityChange(
-  fromDate: Date,
-  trips: Trip[],
-  maxDays: number = 365
-): Date | null {
+export function getNextCapacityChange(fromDate: Date, trips: Trip[], maxDays = 365): Date | null {
   const currentCapacity = countInWindow(fromDate, trips);
 
   for (let i = 1; i <= maxDays; i++) {
-    const date = new Date(
-      Date.UTC(
-        fromDate.getUTCFullYear(),
-        fromDate.getUTCMonth(),
-        fromDate.getUTCDate() + i
-      )
-    );
+    const date = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate() + i));
 
     const newCapacity = countInWindow(date, trips);
     if (newCapacity !== currentCapacity) {

@@ -10,8 +10,7 @@
  *
  * The last line can be a "dep" without a corresponding "arr" if currently abroad.
  */
-
-import type { ParsedLine, ParseResult, Trip } from "./types";
+import type { ParseResult, ParsedLine, Trip } from './types';
 
 /**
  * Error thrown when parsing fails.
@@ -20,10 +19,10 @@ export class ParseError extends Error {
   constructor(
     message: string,
     public lineNumber: number,
-    public line: string
+    public line: string,
   ) {
     super(`Line ${lineNumber}: ${message} ("${line}")`);
-    this.name = "ParseError";
+    this.name = 'ParseError';
   }
 }
 
@@ -36,7 +35,7 @@ export class ParseError extends Error {
  * @throws Error if the date format is invalid
  */
 export function parseDate(dateStr: string): Date {
-  const parts = dateStr.split("/");
+  const parts = dateStr.split('/');
   if (parts.length !== 3) {
     throw new Error(`Invalid date format: "${dateStr}" (expected MM/DD/YY)`);
   }
@@ -68,11 +67,7 @@ export function parseDate(dateStr: string): Date {
   const date = new Date(Date.UTC(year, month - 1, day));
 
   // Validate the date is real (e.g., Feb 30 would roll over)
-  if (
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day ||
-    date.getUTCFullYear() !== year
-  ) {
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day || date.getUTCFullYear() !== year) {
     throw new Error(`Invalid date: ${month}/${day}/${yearShort} does not exist`);
   }
 
@@ -90,18 +85,16 @@ export function parseLine(line: string): ParsedLine | null {
   const trimmed = line.trim();
 
   // Skip empty lines and comments
-  if (trimmed === "" || trimmed.startsWith("#")) {
+  if (trimmed === '' || trimmed.startsWith('#')) {
     return null;
   }
 
-  const match = trimmed.match(/^(dep|arr)\s+(\S+)$/i);
-  if (!match || !match[1] || !match[2]) {
-    throw new Error(
-      `Invalid line format: expected "dep MM/DD/YY" or "arr MM/DD/YY"`
-    );
+  const match = /^(dep|arr)\s+(\S+)$/i.exec(trimmed);
+  if (match?.[1] === undefined || match[2] === undefined) {
+    throw new Error(`Invalid line format: expected "dep MM/DD/YY" or "arr MM/DD/YY"`);
   }
 
-  const type = match[1].toLowerCase() as "dep" | "arr";
+  const type = match[1].toLowerCase() as 'dep' | 'arr';
   const date = parseDate(match[2]);
 
   return { type, date };
@@ -115,23 +108,19 @@ export function parseLine(line: string): ParsedLine | null {
  * @throws ParseError if the file format is invalid
  */
 export function parseTrips(content: string): ParseResult {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   const parsedLines: ParsedLine[] = [];
 
   // Parse all lines
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
+    const line = lines[i] ?? '';
     try {
       const parsed = parseLine(line);
       if (parsed !== null) {
         parsedLines.push(parsed);
       }
     } catch (error) {
-      throw new ParseError(
-        error instanceof Error ? error.message : String(error),
-        i + 1,
-        line
-      );
+      throw new ParseError(error instanceof Error ? error.message : String(error), i + 1, line);
     }
   }
 
@@ -144,24 +133,20 @@ export function parseTrips(content: string): ParseResult {
     if (!depLine) break;
 
     // Must start with a departure
-    if (depLine.type !== "dep") {
-      throw new ParseError(
-        `Expected "dep" but got "arr"`,
-        i + 1,
-        `arr ${formatDateForError(depLine.date)}`
-      );
+    if (depLine.type !== 'dep') {
+      throw new ParseError(`Expected "dep" but got "arr"`, i + 1, `arr ${formatDateForError(depLine.date)}`);
     }
 
     // Check if there's a corresponding arrival
     const arrLine = parsedLines[i + 1];
     if (arrLine) {
-      if (arrLine.type === "arr") {
-        // Validate arrival is after departure
-        if (arrLine.date <= depLine.date) {
+      if (arrLine.type === 'arr') {
+        // Validate arrival is on or after departure (same-day return = 0 days abroad)
+        if (arrLine.date < depLine.date) {
           throw new ParseError(
-            `Arrival date must be after departure date`,
+            `Arrival date must be on or after departure date`,
             i + 2,
-            `arr ${formatDateForError(arrLine.date)}`
+            `arr ${formatDateForError(arrLine.date)}`,
           );
         }
 
@@ -178,7 +163,7 @@ export function parseTrips(content: string): ParseResult {
           throw new ParseError(
             `Departure dates must be in chronological order`,
             i + 2,
-            `dep ${formatDateForError(nextDep.date)}`
+            `dep ${formatDateForError(nextDep.date)}`,
           );
         }
         // Open trip (currently abroad)
@@ -204,19 +189,19 @@ export function parseTrips(content: string): ParseResult {
     const currTrip = trips[j];
     if (!prevTrip || !currTrip) continue;
 
-    // Previous trip must end before current trip starts
+    // Previous trip must end before or on the same day current trip starts (same-day turnaround allowed)
     const prevEnd = prevTrip.arrival ?? prevTrip.departure;
-    if (currTrip.departure <= prevEnd) {
+    if (currTrip.departure < prevEnd) {
       throw new ParseError(
-        `Trips must not overlap: departure on ${formatDateForError(currTrip.departure)} overlaps with previous trip`,
+        `Trips must not overlap: departure on ${formatDateForError(currTrip.departure)} is before previous trip ended`,
         0,
-        ""
+        '',
       );
     }
   }
 
   const lastTrip = trips[trips.length - 1];
-  const hasOpenTrip = trips.length > 0 && lastTrip !== undefined && lastTrip.arrival === null;
+  const hasOpenTrip = trips.length > 0 && lastTrip?.arrival === null;
 
   return { trips, hasOpenTrip };
 }
@@ -239,5 +224,5 @@ function formatDateForError(date: Date): string {
   const month = date.getUTCMonth() + 1;
   const day = date.getUTCDate();
   const year = date.getUTCFullYear() % 100;
-  return `${month}/${day}/${year.toString().padStart(2, "0")}`;
+  return `${month}/${day}/${year.toString().padStart(2, '0')}`;
 }

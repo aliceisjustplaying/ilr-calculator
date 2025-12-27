@@ -1,0 +1,20 @@
+# Example trips file for UK ILR Absence Calculator
+# Copy to trips.txt and edit with your actual travel dates
+
+# Format: dep MM/DD/YY (departure) and arr MM/DD/YY (arrival)
+# Only whole days abroad count - departure and arrival days are excluded
+
+# Trip 1: Winter holiday
+dep 12/20/24
+arr 1/5/25
+
+# Trip 2: Business trip
+dep 3/10/25
+arr 3/15/25
+
+# Trip 3: Summer vacation
+dep 7/1/25
+arr 7/20/25
+
+# Trip 4: Currently abroad (no arrival = open trip)
+dep 11/15/25

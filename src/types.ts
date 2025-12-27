@@ -20,7 +20,7 @@ export interface Trip {
  * Used as an intermediate representation before constructing Trip objects.
  */
 export interface ParsedLine {
-  type: "dep" | "arr";
+  type: 'dep' | 'arr';
   date: Date;
 }
 

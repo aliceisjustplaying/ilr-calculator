@@ -11,13 +11,7 @@
  *   bun run src/cli.ts trips.txt --forecast 90      # Show 90-day forecast
  *   bun run src/cli.ts trips.txt --return-date 2025-12-20  # Simulate return date
  */
-
-import {
-  getCapacity,
-  getCapacityForecast,
-  simulateContinuousTrip,
-  utcDate,
-} from "./calculator";
+import { getCapacity, getCapacityForecast, simulateContinuousTrip, utcDate } from './calculator';
 import {
   formatCapacity,
   formatDateReadable,
@@ -25,8 +19,8 @@ import {
   formatHeader,
   formatSimulation,
   formatSummary,
-} from "./formatter";
-import { parseTripsFile } from "./parser";
+} from './formatter';
+import { parseTripsFile } from './parser';
 
 /**
  * Parse command line arguments.
@@ -34,6 +28,7 @@ import { parseTripsFile } from "./parser";
 function parseArgs(): {
   tripsFile: string;
   checkDate: Date;
+  hasExplicitDate: boolean;
   forecastDays: number | null;
   returnDate: Date | null;
   showTrips: boolean;
@@ -41,8 +36,11 @@ function parseArgs(): {
 } {
   const args = process.argv.slice(2);
 
-  let tripsFile = "";
-  let checkDate = new Date();
+  let tripsFile = '';
+  // Default to today's local date, converted to UTC midnight
+  const now = new Date();
+  let checkDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  let hasExplicitDate = false;
   let forecastDays: number | null = null;
   let returnDate: Date | null = null;
   let showTrips = false;
@@ -52,13 +50,13 @@ function parseArgs(): {
   while (i < args.length) {
     const arg = args[i];
 
-    if (arg === "--help" || arg === "-h") {
+    if (arg === '--help' || arg === '-h') {
       help = true;
       i++;
-    } else if (arg === "--date" || arg === "-d") {
+    } else if (arg === '--date' || arg === '-d') {
       const dateStr = args[i + 1];
-      if (!dateStr) {
-        console.error("Error: --date requires a date argument (YYYY-MM-DD)");
+      if (dateStr === undefined || dateStr === '') {
+        console.error('Error: --date requires a date argument (YYYY-MM-DD)');
         process.exit(1);
       }
       const parsed = parseISODate(dateStr);
@@ -67,19 +65,20 @@ function parseArgs(): {
         process.exit(1);
       }
       checkDate = parsed;
+      hasExplicitDate = true;
       i += 2;
-    } else if (arg === "--forecast" || arg === "-f") {
-      const days = parseInt(args[i + 1] ?? "", 10);
+    } else if (arg === '--forecast' || arg === '-f') {
+      const days = parseInt(args[i + 1] ?? '', 10);
       if (isNaN(days) || days <= 0) {
-        console.error("Error: --forecast requires a positive number of days");
+        console.error('Error: --forecast requires a positive number of days');
         process.exit(1);
       }
       forecastDays = days;
       i += 2;
-    } else if (arg === "--return-date" || arg === "-r") {
+    } else if (arg === '--return-date' || arg === '-r') {
       const dateStr = args[i + 1];
-      if (!dateStr) {
-        console.error("Error: --return-date requires a date argument (YYYY-MM-DD)");
+      if (dateStr === undefined || dateStr === '') {
+        console.error('Error: --return-date requires a date argument (YYYY-MM-DD)');
         process.exit(1);
       }
       const parsed = parseISODate(dateStr);
@@ -89,13 +88,13 @@ function parseArgs(): {
       }
       returnDate = parsed;
       i += 2;
-    } else if (arg === "--trips" || arg === "-t") {
+    } else if (arg === '--trips' || arg === '-t') {
       showTrips = true;
       i++;
-    } else if (arg?.startsWith("-")) {
+    } else if (arg?.startsWith('-') === true) {
       console.error(`Error: Unknown option: ${arg}`);
       process.exit(1);
-    } else if (arg && tripsFile === "") {
+    } else if (arg !== undefined && arg !== '' && tripsFile === '') {
       tripsFile = arg;
       i++;
     } else {
@@ -103,15 +102,15 @@ function parseArgs(): {
     }
   }
 
-  return { tripsFile, checkDate, forecastDays, returnDate, showTrips, help };
+  return { tripsFile, checkDate, hasExplicitDate, forecastDays, returnDate, showTrips, help };
 }
 
 /**
  * Parse an ISO date string (YYYY-MM-DD) to a UTC Date.
  */
 function parseISODate(dateStr: string): Date | null {
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match || !match[1] || !match[2] || !match[3]) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
     return null;
   }
 
@@ -122,11 +121,7 @@ function parseISODate(dateStr: string): Date | null {
   const date = utcDate(year, month, day);
 
   // Validate the date is real
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month ||
-    date.getUTCDate() !== day
-  ) {
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month || date.getUTCDate() !== day) {
     return null;
   }
 
@@ -176,8 +171,7 @@ Examples:
  * Main entry point.
  */
 async function main(): Promise<void> {
-  const { tripsFile, checkDate, forecastDays, returnDate, showTrips, help } =
-    parseArgs();
+  const { tripsFile, checkDate, hasExplicitDate, forecastDays, returnDate, showTrips, help } = parseArgs();
 
   if (help) {
     printHelp();
@@ -185,9 +179,9 @@ async function main(): Promise<void> {
   }
 
   if (!tripsFile) {
-    console.error("Error: No trips file specified");
-    console.error("Usage: bun run src/cli.ts <trips-file> [options]");
-    console.error("Use --help for more information.");
+    console.error('Error: No trips file specified');
+    console.error('Usage: bun run src/cli.ts <trips-file> [options]');
+    console.error('Use --help for more information.');
     process.exit(1);
   }
 
@@ -202,8 +196,8 @@ async function main(): Promise<void> {
   let parseResult;
   try {
     parseResult = await parseTripsFile(tripsFile);
-  } catch (error) {
-    console.error(`Error parsing trips file: ${error}`);
+  } catch (error: unknown) {
+    console.error(`Error parsing trips file: ${String(error)}`);
     process.exit(1);
   }
 
@@ -213,12 +207,14 @@ async function main(): Promise<void> {
   let modifiedTrips = trips;
   if (returnDate && hasOpenTrip && trips.length > 0) {
     const lastTrip = trips[trips.length - 1];
-    if (lastTrip && lastTrip.arrival === null) {
+    if (lastTrip?.arrival === null) {
+      // Validate return date is on or after departure
+      if (returnDate < lastTrip.departure) {
+        console.error('Error: --return-date must be on or after the departure date');
+        process.exit(1);
+      }
       // Replace the open trip with a closed one
-      modifiedTrips = [
-        ...trips.slice(0, -1),
-        { departure: lastTrip.departure, arrival: returnDate },
-      ];
+      modifiedTrips = [...trips.slice(0, -1), { departure: lastTrip.departure, arrival: returnDate }];
       console.log(`Simulating return on ${formatDateReadable(returnDate)}...\n`);
     }
   }
@@ -226,55 +222,53 @@ async function main(): Promise<void> {
   // Calculate capacity
   const capacity = getCapacity(checkDate, modifiedTrips);
 
-  // Calculate simulation for open trips
+  // Calculate simulation
   let simulation = null;
-  if (hasOpenTrip && !returnDate && trips.length > 0) {
+  let simulationStartDate: Date | null = null;
+
+  if (returnDate && hasExplicitDate) {
+    // If both --return-date and --date specified, simulate departing on checkDate
+    simulation = simulateContinuousTrip(checkDate, modifiedTrips);
+    simulationStartDate = checkDate;
+  } else if (hasOpenTrip && !returnDate && trips.length > 0) {
+    // Open trip: simulate from departure date
     const lastTrip = trips[trips.length - 1];
     if (lastTrip) {
       simulation = simulateContinuousTrip(lastTrip.departure, trips);
+      simulationStartDate = lastTrip.departure;
     }
   }
 
   // Output
-  if (forecastDays) {
+  if (forecastDays !== null) {
     // Show forecast
     const forecast = getCapacityForecast(checkDate, modifiedTrips, forecastDays);
     console.log(formatForecast(forecast, forecastDays <= 31));
   } else if (showTrips) {
     // Show detailed summary with trips
-    console.log(
-      formatSummary(
-        checkDate,
-        modifiedTrips,
-        capacity,
-        simulation,
-        hasOpenTrip && !returnDate
-      )
-    );
+    console.log(formatSummary(checkDate, modifiedTrips, capacity, simulation, hasOpenTrip && !returnDate));
   } else {
     // Show basic capacity
     console.log(formatHeader());
-    console.log("");
+    console.log('');
     console.log(formatCapacity(capacity));
 
-    if (hasOpenTrip && !returnDate && simulation) {
-      const lastTrip = modifiedTrips[modifiedTrips.length - 1];
-      if (lastTrip) {
-        console.log("");
-        console.log("─".repeat(50));
-        console.log(formatSimulation(simulation, lastTrip.departure));
-      }
+    if (simulation && simulationStartDate) {
+      console.log('');
+      console.log('─'.repeat(50));
+      console.log(formatSimulation(simulation, simulationStartDate));
     }
 
-    console.log("");
-    console.log("─".repeat(50));
-    console.log(`Trips: ${trips.length} recorded${hasOpenTrip ? " (1 ongoing)" : ""}`);
-    console.log("Use --trips to see trip details, --forecast N for projections");
+    console.log('');
+    console.log('─'.repeat(50));
+    const tripStatus = hasOpenTrip && !returnDate ? ' (1 ongoing)' : '';
+    console.log(`Trips: ${modifiedTrips.length} recorded${tripStatus}`);
+    console.log('Use --trips to see trip details, --forecast N for projections');
   }
 }
 
 // Run
-main().catch((error) => {
-  console.error("Unexpected error:", error);
+main().catch((error: unknown) => {
+  console.error('Unexpected error:', error);
   process.exit(1);
 });
