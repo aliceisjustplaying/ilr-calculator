@@ -34,3 +34,6 @@ backup/
 
 # User's actual trip data (use trips.txt.example as template)
 trips.txt
+
+# Claude Code session files
+.claude/
