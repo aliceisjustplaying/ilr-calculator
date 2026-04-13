@@ -11,7 +11,7 @@
  *   bun run src/cli.ts trips.txt --forecast 90      # Show 90-day forecast
  *   bun run src/cli.ts trips.txt --return-date 2025-12-20  # Simulate return date
  */
-import { getCapacity, getCapacityForecast, simulateContinuousTrip, utcDate } from './calculator';
+import { getCapacity, getCapacityForecast, simulateContinuousTrip, utcDate, utcStartOfDay } from './calculator';
 import {
   formatCapacity,
   formatDateReadable,
@@ -37,9 +37,9 @@ function parseArgs(): {
   const args = process.argv.slice(2);
 
   let tripsFile = '';
-  // Default to today's local date, converted to UTC midnight
+  // Default to today's UTC calendar date to keep calculations timezone-stable.
   const now = new Date();
-  let checkDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  let checkDate = utcStartOfDay(now);
   let hasExplicitDate = false;
   let forecastDays: number | null = null;
   let returnDate: Date | null = null;

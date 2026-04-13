@@ -16,6 +16,7 @@ import {
   getNextCapacityChange,
   simulateContinuousTrip,
   utcDate,
+  utcStartOfDay,
 } from './calculator';
 import type { Trip } from './types';
 import { ABSENCE_LIMIT } from './types';
@@ -82,6 +83,13 @@ describe('getAbsenceDays', () => {
     const arr = utcDate(2024, 2, 2); // Mar 2, 2024
     // Full days: Feb 28, Feb 29, Mar 1 = 3 days
     expect(getAbsenceDays(dep, arr)).toBe(3);
+  });
+});
+
+describe('utcStartOfDay', () => {
+  test('normalizes using the UTC calendar day, not the local timezone', () => {
+    const instant = new Date('2026-04-13T00:30:00Z');
+    expect(utcStartOfDay(instant).toISOString()).toBe('2026-04-13T00:00:00.000Z');
   });
 });
 

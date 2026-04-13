@@ -13,6 +13,13 @@ import type { CapacityResult, ForecastEntry, SimulationResult, Trip } from './ty
 import { ABSENCE_LIMIT, WINDOW_DAYS } from './types';
 
 /**
+ * Normalize a date to midnight UTC on the same UTC calendar day.
+ */
+export function utcStartOfDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/**
  * Calculate the number of absence days for a trip.
  *
  * Per GOV.UK guidance, only WHOLE days outside the UK count:
@@ -103,7 +110,7 @@ export function countInWindow(checkDate: Date, trips: Trip[]): number {
 
   // For open trips, cap at today's date (don't assume staying abroad until future checkDate)
   const now = new Date();
-  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const today = utcStartOfDay(now);
   const openTripEndDate = checkDate.getTime() < today.getTime() ? checkDate : today;
 
   let totalDays = 0;

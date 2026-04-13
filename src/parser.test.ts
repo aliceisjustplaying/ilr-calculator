@@ -93,6 +93,13 @@ describe('parseLine', () => {
     expect(parseLine('dep   1/1/25')).not.toBeNull(); // Multiple spaces are allowed
   });
 
+  test('accepts trailing inline comments', () => {
+    const result = parseLine('dep 1/1/25   # holiday');
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe('dep');
+    expect(result!.date.getUTCFullYear()).toBe(2025);
+  });
+
   test('returns null for empty lines', () => {
     expect(parseLine('')).toBeNull();
     expect(parseLine('   ')).toBeNull();
@@ -223,6 +230,20 @@ arr 1/15/25
     expect(result.trips).toHaveLength(2);
   });
 
+  test('accepts inline comments in trip files', () => {
+    const content = `
+dep 1/1/25   # leave UK
+arr 1/5/25   # arrive back
+    `.trim();
+    const result = parseTrips(content);
+    expect(result.trips).toHaveLength(1);
+    expect(result.hasOpenTrip).toBe(false);
+  });
+
+  test('rejects a non-final departure without arrival', () => {
+    expect(() => parseTrips('dep 1/1/25\ndep 1/2/25\narr 1/3/25')).toThrow('only valid for the last trip');
+  });
+
   test('throws ParseError with line number', () => {
     try {
       parseTrips('dep 1/1/25\narr invalid\ndep 2/2/25');
@@ -230,6 +251,16 @@ arr 1/15/25
     } catch (e) {
       expect(e).toBeInstanceOf(ParseError);
       expect((e as ParseError).lineNumber).toBe(2);
+    }
+  });
+
+  test('preserves actual line numbers after comments', () => {
+    try {
+      parseTrips('# comment\n\ndep 1/1/25\ndep 1/2/25\narr 1/3/25');
+      expect(true).toBe(false);
+    } catch (e) {
+      expect(e).toBeInstanceOf(ParseError);
+      expect((e as ParseError).lineNumber).toBe(3);
     }
   });
 

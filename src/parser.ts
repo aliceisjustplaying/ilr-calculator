@@ -12,6 +12,12 @@
  */
 import type { ParseResult, ParsedLine, Trip } from './types';
 
+interface ParsedFileLine {
+  parsed: ParsedLine;
+  line: string;
+  lineNumber: number;
+}
+
 /**
  * Error thrown when parsing fails.
  */
@@ -89,7 +95,7 @@ export function parseLine(line: string): ParsedLine | null {
     return null;
   }
 
-  const match = /^(dep|arr)\s+(\S+)$/i.exec(trimmed);
+  const match = /^(dep|arr)\s+(\S+)(?:\s+#.*)?$/i.exec(trimmed);
   if (match?.[1] === undefined || match[2] === undefined) {
     throw new Error(`Invalid line format: expected "dep MM/DD/YY" or "arr MM/DD/YY"`);
   }
@@ -109,7 +115,7 @@ export function parseLine(line: string): ParsedLine | null {
  */
 export function parseTrips(content: string): ParseResult {
   const lines = content.split('\n');
-  const parsedLines: ParsedLine[] = [];
+  const parsedLines: ParsedFileLine[] = [];
 
   // Parse all lines
   for (let i = 0; i < lines.length; i++) {
@@ -117,7 +123,7 @@ export function parseTrips(content: string): ParseResult {
     try {
       const parsed = parseLine(line);
       if (parsed !== null) {
-        parsedLines.push(parsed);
+        parsedLines.push({ parsed, line, lineNumber: i + 1 });
       }
     } catch (error) {
       throw new ParseError(error instanceof Error ? error.message : String(error), i + 1, line);
@@ -126,51 +132,58 @@ export function parseTrips(content: string): ParseResult {
 
   // Validate and construct trips
   const trips: Trip[] = [];
+  const tripSources: ParsedFileLine[] = [];
   let i = 0;
 
   while (i < parsedLines.length) {
-    const depLine = parsedLines[i];
-    if (!depLine) break;
+    const depEntry = parsedLines[i];
+    if (!depEntry) break;
+    const depLine = depEntry.parsed;
 
     // Must start with a departure
     if (depLine.type !== 'dep') {
-      throw new ParseError(`Expected "dep" but got "arr"`, i + 1, `arr ${formatDateForError(depLine.date)}`);
+      throw new ParseError(`Expected "dep" but got "arr"`, depEntry.lineNumber, depEntry.line);
     }
 
     // Check if there's a corresponding arrival
-    const arrLine = parsedLines[i + 1];
-    if (arrLine) {
+    const arrEntry = parsedLines[i + 1];
+    if (arrEntry) {
+      const arrLine = arrEntry.parsed;
+
       if (arrLine.type === 'arr') {
         // Validate arrival is on or after departure (same-day return = 0 days abroad)
         if (arrLine.date < depLine.date) {
-          throw new ParseError(
-            `Arrival date must be on or after departure date`,
-            i + 2,
-            `arr ${formatDateForError(arrLine.date)}`,
-          );
+          throw new ParseError(`Arrival date must be on or after departure date`, arrEntry.lineNumber, arrEntry.line);
         }
 
         trips.push({
           departure: depLine.date,
           arrival: arrLine.date,
         });
+        tripSources.push(depEntry);
         i += 2;
       } else {
         // Next line is another departure - this departure has no arrival yet
         // This is only valid if it's the last departure
-        const nextDep = arrLine; // It's a dep, not arr
+        const nextDep = arrLine;
         if (nextDep.date <= depLine.date) {
+          throw new ParseError(`Departure dates must be in chronological order`, arrEntry.lineNumber, arrEntry.line);
+        }
+
+        if (i + 1 < parsedLines.length - 1) {
           throw new ParseError(
-            `Departure dates must be in chronological order`,
-            i + 2,
-            `dep ${formatDateForError(nextDep.date)}`,
+            `A departure without a matching arrival is only valid for the last trip`,
+            depEntry.lineNumber,
+            depEntry.line,
           );
         }
+
         // Open trip (currently abroad)
         trips.push({
           departure: depLine.date,
           arrival: null,
         });
+        tripSources.push(depEntry);
         i += 1;
       }
     } else {
@@ -179,6 +192,7 @@ export function parseTrips(content: string): ParseResult {
         departure: depLine.date,
         arrival: null,
       });
+      tripSources.push(depEntry);
       i += 1;
     }
   }
@@ -192,10 +206,11 @@ export function parseTrips(content: string): ParseResult {
     // Previous trip must end before or on the same day current trip starts (same-day turnaround allowed)
     const prevEnd = prevTrip.arrival ?? prevTrip.departure;
     if (currTrip.departure < prevEnd) {
+      const currTripSource = tripSources[j];
       throw new ParseError(
         `Trips must not overlap: departure on ${formatDateForError(currTrip.departure)} is before previous trip ended`,
-        0,
-        '',
+        currTripSource?.lineNumber ?? 0,
+        currTripSource?.line ?? '',
       );
     }
   }
