@@ -163,28 +163,17 @@ export function parseTrips(content: string): ParseResult {
         tripSources.push(depEntry);
         i += 2;
       } else {
-        // Next line is another departure - this departure has no arrival yet
-        // This is only valid if it's the last departure
-        const nextDep = arrLine;
-        if (nextDep.date <= depLine.date) {
-          throw new ParseError(`Departure dates must be in chronological order`, arrEntry.lineNumber, arrEntry.line);
-        }
-
-        if (i + 1 < parsedLines.length - 1) {
-          throw new ParseError(
-            `A departure without a matching arrival is only valid for the last trip`,
-            depEntry.lineNumber,
-            depEntry.line,
-          );
-        }
-
-        // Open trip (currently abroad)
-        trips.push({
-          departure: depLine.date,
-          arrival: null,
-        });
-        tripSources.push(depEntry);
-        i += 1;
+        // Next line is another departure. The current "dep" can NEVER be a
+        // valid open trip here: an unmatched departure is only legal as the
+        // very last entry in the file, and a line follows this one.
+        // (The previous `i + 1 < parsedLines.length - 1` check was off by
+        // one and silently created a phantom open trip when the file ended
+        // with two unmatched departures.)
+        throw new ParseError(
+          `A departure without a matching arrival is only valid for the last trip`,
+          depEntry.lineNumber,
+          depEntry.line,
+        );
       }
     } else {
       // Last entry is a departure with no arrival (open trip)

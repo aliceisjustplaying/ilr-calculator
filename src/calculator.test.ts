@@ -128,12 +128,12 @@ describe('countInWindow', () => {
   test('trip partially in window counts only in-window days', () => {
     const trips: Trip[] = [{ departure: utcDate(2024, 0, 1), arrival: utcDate(2024, 0, 20) }];
     // Check on Jan 10, 2025
-    // 365 days before Jan 10, 2025 = Jan 11, 2024 (2024 is leap year)
-    // Window is (Jan 11, 2024, Jan 10, 2025]
+    // 12 calendar months before Jan 10, 2025 = Jan 10, 2024
+    // Window is (Jan 10, 2024, Jan 10, 2025]
     // Trip absence days: Jan 2-19 (18 days)
-    // Days in window: Jan 12-19 = 8 days (Jan 11 is exclusive boundary)
+    // Days in window: Jan 11-19 = 9 days (Jan 10 is exclusive boundary)
     const count = countInWindow(utcDate(2025, 0, 10), trips);
-    expect(count).toBe(8);
+    expect(count).toBe(9);
   });
 
   test('trip fully outside window counts 0 days', () => {
@@ -159,19 +159,18 @@ describe('countInWindow', () => {
   });
 
   test('window boundary is exclusive start, inclusive end', () => {
-    // 365 days before Jan 10, 2025 = Jan 11, 2024 (2024 is leap year)
     const checkDate = utcDate(2025, 0, 10);
-    // Window is (Jan 11, 2024, Jan 10, 2025]
+    // Window is (Jan 10, 2024, Jan 10, 2025]
 
-    // Trip with absence on Jan 11, 2024 (exactly at window start boundary)
-    const tripOnBoundary: Trip[] = [{ departure: utcDate(2024, 0, 10), arrival: utcDate(2024, 0, 12) }];
-    // Absence day is Jan 11, 2024 - exactly at exclusive boundary, should NOT count
+    // Trip with absence on Jan 10, 2024 (exactly at window start boundary)
+    const tripOnBoundary: Trip[] = [{ departure: utcDate(2024, 0, 9), arrival: utcDate(2024, 0, 11) }];
+    // Absence day is Jan 10, 2024 - exactly at exclusive boundary, should NOT count
     const count1 = countInWindow(checkDate, tripOnBoundary);
     expect(count1).toBe(0);
 
-    // Trip with absence on Jan 12, 2024 (just inside window)
-    const tripInsideWindow: Trip[] = [{ departure: utcDate(2024, 0, 11), arrival: utcDate(2024, 0, 13) }];
-    // Absence day is Jan 12, 2024 - inside window, should count
+    // Trip with absence on Jan 11, 2024 (just inside window)
+    const tripInsideWindow: Trip[] = [{ departure: utcDate(2024, 0, 10), arrival: utcDate(2024, 0, 12) }];
+    // Absence day is Jan 11, 2024 - inside window, should count
     const count2 = countInWindow(checkDate, tripInsideWindow);
     expect(count2).toBe(1);
   });
@@ -230,9 +229,9 @@ describe('getCapacity', () => {
 describe('simulateContinuousTrip', () => {
   test('calculates max days correctly with no prior trips', () => {
     const result = simulateContinuousTrip(utcDate(2025, 0, 1), []);
-    // With no prior trips, can stay 180 days (would hit 180 on day 181)
-    // Because absence days exclude dep day, on day 181 we'd have 180 absence days
-    expect(result.maxDays).toBe(180);
+    // With no prior trips, can stay 181 calendar days because that is exactly
+    // 180 absence days. The limit is breached only above 180.
+    expect(result.maxDays).toBe(181);
     expect(result.hitLimitDate).not.toBeNull();
   });
 
@@ -242,8 +241,8 @@ describe('simulateContinuousTrip', () => {
     ];
     // Start new trip on Feb 1
     const result = simulateContinuousTrip(utcDate(2025, 1, 1), trips);
-    // Already used 49 days, can use 131 more
-    expect(result.maxDays).toBe(131);
+    // Already used 49 days, can use 131 more absence days.
+    expect(result.maxDays).toBe(132);
   });
 
   test('accounts for trips falling off window', () => {
@@ -266,8 +265,8 @@ describe('simulateContinuousTrip', () => {
     ];
     // Simulate from Jan 15 (the open trip departure)
     const result = simulateContinuousTrip(utcDate(2025, 0, 15), trips);
-    // Only the completed 8-day trip counts, so can stay 172 more days
-    expect(result.maxDays).toBe(172);
+    // Only the completed 8-day trip counts, so can stay 172 more absence days.
+    expect(result.maxDays).toBe(173);
   });
 
   test('returns null hitLimitDate if limit not reached', () => {
@@ -285,7 +284,6 @@ describe('getCapacityForecast', () => {
 
   test('shows capacity increasing as trips fall off', () => {
     // Trip that will fall off during January 2025
-    // 365 days before Jan 5, 2025 = Jan 6, 2024 (leap year)
     const trips: Trip[] = [
       { departure: utcDate(2024, 0, 5), arrival: utcDate(2024, 0, 15) }, // 9 days (Jan 6-14)
     ];
@@ -293,12 +291,12 @@ describe('getCapacityForecast', () => {
     // Check forecast from Jan 1, 2025
     const forecast = getCapacityForecast(utcDate(2025, 0, 1), trips, 20);
 
-    // On Jan 5, 2025: window is (Jan 6, 2024, Jan 5, 2025]
-    // Trip days Jan 7-14 are in window = 8 days (Jan 6 is at exclusive boundary)
+    // On Jan 5, 2025: window is (Jan 5, 2024, Jan 5, 2025]
+    // Trip days Jan 6-14 are in window = 9 days.
     const jan5 = forecast[4]!;
-    expect(jan5.usedDays).toBe(8);
+    expect(jan5.usedDays).toBe(9);
 
-    // On Jan 15, 2025: window is (Jan 16, 2024, Jan 15, 2025]
+    // On Jan 15, 2025: window is (Jan 15, 2024, Jan 15, 2025]
     // All trip days (Jan 6-14) are before the window start, so 0
     const jan15 = forecast[14]!;
     expect(jan15.usedDays).toBe(0);
@@ -323,17 +321,13 @@ describe('getNextCapacityChange', () => {
       { departure: utcDate(2024, 0, 4), arrival: utcDate(2024, 0, 6) }, // 1 day (Jan 5)
     ];
 
-    // From Jan 1, 2025, next change is when Jan 5 falls off
-    // 365 days before Jan 4, 2025 = Jan 5, 2024 (leap year)
-    // So on Jan 4, 2025: window is (Jan 5, 2024, Jan 4, 2025]
-    // Jan 5 is at the exclusive boundary, so it's NOT in the window = 0 days
-    // On Jan 3, 2025: window is (Jan 4, 2024, Jan 3, 2025]
-    // Jan 5 > Jan 4, so it IS in the window = 1 day
-    // So the change happens on Jan 4, 2025
+    // From Jan 1, 2025, next change is when Jan 5 falls off.
+    // On Jan 5, 2025: window is (Jan 5, 2024, Jan 5, 2025], so Jan 5 is
+    // at the exclusive boundary and no longer counted.
     const nextChange = getNextCapacityChange(utcDate(2025, 0, 1), trips);
 
     expect(nextChange).not.toBeNull();
-    expect(nextChange!.getUTCDate()).toBe(4);
+    expect(nextChange!.getUTCDate()).toBe(5);
     expect(nextChange!.getUTCMonth()).toBe(0);
   });
 
@@ -368,11 +362,10 @@ describe('edge cases and regressions', () => {
     ];
     // Check on Jan 1, 2025
     // Window is (Jan 1, 2024, Jan 1, 2025]
-    // All of 2024 is in the window = 366 days (2024 is leap year)
-    // But wait, absence days are Jan 2, 2023 to Dec 31, 2024
-    // Days in window: Jan 2, 2024 to Dec 31, 2024 = 364 days
+    // Absence days are Jan 2, 2023 to Dec 31, 2024
+    // Days in window: Jan 2, 2024 to Dec 31, 2024 = 365 days
     const count = countInWindow(utcDate(2025, 0, 1), trips);
-    expect(count).toBe(364);
+    expect(count).toBe(365);
   });
 
   test('user scenario: Dec 20, 2025 capacity should be 57', () => {
@@ -415,9 +408,8 @@ describe('edge cases and regressions', () => {
 });
 
 describe('leap year window calculations', () => {
-  test('365 days before Jan 10, 2025 is Jan 11, 2024 (leap year)', () => {
-    // 2024 is a leap year (366 days), so 365 days before Jan 10, 2025 = Jan 11, 2024
-    // Window: (Jan 11, 2024, Jan 10, 2025]
+  test('12 calendar months before Jan 10, 2025 is Jan 10, 2024', () => {
+    // Window: (Jan 10, 2024, Jan 10, 2025]
     // Trip with absence on Jan 10, 2024 should be OUTSIDE the window
     const tripOnJan10: Trip[] = [
       { departure: utcDate(2024, 0, 9), arrival: utcDate(2024, 0, 11) }, // Absence: Jan 10
@@ -425,12 +417,12 @@ describe('leap year window calculations', () => {
     const count1 = countInWindow(utcDate(2025, 0, 10), tripOnJan10);
     expect(count1).toBe(0); // Jan 10 is before window start
 
-    // Trip with absence on Jan 11, 2024 should be at exclusive boundary (not counted)
+    // Trip with absence on Jan 11, 2024 should be IN the window
     const tripOnJan11: Trip[] = [
       { departure: utcDate(2024, 0, 10), arrival: utcDate(2024, 0, 12) }, // Absence: Jan 11
     ];
     const count2 = countInWindow(utcDate(2025, 0, 10), tripOnJan11);
-    expect(count2).toBe(0); // Jan 11 is exactly at exclusive boundary
+    expect(count2).toBe(1); // Jan 11 is inside window
 
     // Trip with absence on Jan 12, 2024 should be IN the window
     const tripOnJan12: Trip[] = [
@@ -440,9 +432,8 @@ describe('leap year window calculations', () => {
     expect(count3).toBe(1); // Jan 12 is inside window
   });
 
-  test('365 days before Mar 1, 2025 is Mar 2, 2024 (after Feb 29)', () => {
-    // 2024 has Feb 29, so 365 days before Mar 1, 2025 = Mar 2, 2024
-    // Window: (Mar 2, 2024, Mar 1, 2025]
+  test('12 calendar months before Mar 1, 2025 is Mar 1, 2024', () => {
+    // Window: (Mar 1, 2024, Mar 1, 2025]
     // Trip with absence on Feb 29, 2024 should be OUTSIDE the window
     const tripOnFeb29: Trip[] = [
       { departure: utcDate(2024, 1, 28), arrival: utcDate(2024, 2, 1) }, // Absence: Feb 29
@@ -458,14 +449,13 @@ describe('leap year window calculations', () => {
     expect(count2).toBe(1); // Mar 3 is inside window
   });
 
-  test('365 days before Feb 28, 2025 spans Feb 29, 2024', () => {
-    // 365 days before Feb 28, 2025 = Mar 1, 2024 (leap year adds a day)
-    // Window: (Mar 1, 2024, Feb 28, 2025]
-    // Trip with Feb 29, 2024 absence should be OUTSIDE window
+  test('12 calendar months before Feb 28, 2025 spans Feb 29, 2024', () => {
+    // Window: (Feb 28, 2024, Feb 28, 2025]
+    // Trip with Feb 29, 2024 absence should be inside the window
     const tripOnFeb29: Trip[] = [
       { departure: utcDate(2024, 1, 28), arrival: utcDate(2024, 2, 1) }, // Absence: Feb 29
     ];
     const count = countInWindow(utcDate(2025, 1, 28), tripOnFeb29);
-    expect(count).toBe(0); // Feb 29, 2024 is before Mar 1, 2024 window start
+    expect(count).toBe(1);
   });
 });

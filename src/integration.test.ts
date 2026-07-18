@@ -167,12 +167,12 @@ arr 2/10/25
   });
 
   test('at exactly 180 days', () => {
-    // Create a trip of exactly 181 days (to have 180 absence days)
-    const result = parseTrips('dep 1/1/25\narr 7/2/25');
+    // Create a trip with exactly 180 absence days.
+    const result = parseTrips('dep 1/1/25\narr 7/1/25');
 
-    // Check on Jul 2 (arrival day)
-    const capacity = getCapacity(utcDate(2025, 6, 2), result.trips);
-    expect(capacity.usedDays).toBe(181); // Jan 2 - Jul 1 = 181 days
+    // Check on Jul 1 (arrival day)
+    const capacity = getCapacity(utcDate(2025, 6, 1), result.trips);
+    expect(capacity.usedDays).toBe(180); // Jan 2 - Jun 30 = 180 days
     expect(capacity.availableDays).toBe(0);
   });
 });
@@ -185,8 +185,8 @@ describe('integration: simulation accuracy', () => {
 
     const simulation = simulateContinuousTrip(utcDate(2025, 1, 1), trips);
 
-    // With 48 days used, should be able to stay 132 more days
-    expect(simulation.maxDays).toBe(132);
+    // With 48 days used, should be able to stay 132 more absence days.
+    expect(simulation.maxDays).toBe(133);
   });
 
   test('simulation accounts for trips falling off', () => {

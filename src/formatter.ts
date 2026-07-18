@@ -3,6 +3,7 @@
  *
  * Provides human-readable output for capacity calculations and forecasts.
  */
+import { getAbsenceDays } from './calculator';
 import type { CapacityResult, ForecastEntry, SimulationResult, Trip } from './types';
 import { ABSENCE_LIMIT } from './types';
 
@@ -154,9 +155,8 @@ export function formatTrips(trips: Trip[]): string {
 
     if (trip.arrival) {
       const arr = formatDate(trip.arrival);
-      // Calculate days (excluding departure and arrival days, minimum 0 for same-day trips)
-      const calendarDays = Math.floor((trip.arrival.getTime() - trip.departure.getTime()) / (24 * 60 * 60 * 1000));
-      const days = Math.max(0, calendarDays - 1);
+      // Single source of truth for absence-day math lives in calculator.ts
+      const days = getAbsenceDays(trip.departure, trip.arrival);
       lines.push(`${num}. ${dep} → ${arr} (${days} days abroad)`);
     } else {
       lines.push(`${num}. ${dep} → (ongoing)`);
@@ -214,7 +214,7 @@ export function formatSummary(
 
   // Footer with rules reminder
   sections.push('─'.repeat(50));
-  sections.push('Rules: GOV.UK rolling 12-month window (365 days)');
+  sections.push('Rules: GOV.UK rolling 12-calendar-month window');
   sections.push('       Only whole days abroad count (excl. travel days)');
 
   return sections.join('\n');

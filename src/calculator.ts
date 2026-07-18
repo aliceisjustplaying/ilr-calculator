@@ -3,20 +3,45 @@
  *
  * Implements the rolling 12-month window calculation per GOV.UK rules:
  * - Only WHOLE days outside UK count (departure & arrival days excluded)
- * - Rolling 365-day window (not calendar/tax year)
- * - Limit: 180 days in any 365-day period
+ * - Rolling 12-CALENDAR-MONTH window (366 days when it spans 29 Feb)
+ * - Limit: no MORE than 180 days in any 12-month period (180 exactly is legal)
  *
  * CRITICAL: These calculations affect ILR eligibility. All logic must be
  * thoroughly tested and verified against known correct values.
  */
 import type { CapacityResult, ForecastEntry, SimulationResult, Trip } from './types';
-import { ABSENCE_LIMIT, WINDOW_DAYS } from './types';
+import { ABSENCE_LIMIT } from './types';
 
 /**
  * Normalize a date to midnight UTC on the same UTC calendar day.
  */
 export function utcStartOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/**
+ * Compute the EXCLUSIVE start of the rolling 12-month window ending on `date`.
+ *
+ * The Home Office rule is "180 days in any 12-month period", i.e. calendar
+ * months - NOT a fixed 365 days. A window spanning 29 February is 366 days
+ * wide; using a fixed 365 makes such windows one day too narrow, which can
+ * UNDERCOUNT absences (the unsafe direction).
+ *
+ * When the same day-of-month does not exist one year earlier (checkDate is
+ * 29 Feb), we clamp BACKWARD to 28 Feb so the window is never narrower than
+ * 12 calendar months (conservative direction).
+ */
+export function windowStartFor(date: Date): Date {
+  const y = date.getUTCFullYear() - 1;
+  const m = date.getUTCMonth();
+  const d = date.getUTCDate();
+  const candidate = new Date(Date.UTC(y, m, d));
+  if (candidate.getUTCMonth() !== m) {
+    // Day rolled into the next month (29 Feb -> 1 Mar): clamp to the last
+    // day of the intended month instead.
+    return new Date(Date.UTC(y, m + 1, 0));
+  }
+  return candidate;
 }
 
 /**
@@ -91,33 +116,32 @@ export function getAbsenceDates(departure: Date, arrival: Date | null, asOfDate?
 /**
  * Count absence days within a rolling window.
  *
- * The window is (checkDate - 365 days, checkDate], meaning:
+ * The window is (checkDate - 12 months, checkDate], meaning:
  * - The start boundary is EXCLUSIVE
  * - The check date is INCLUSIVE
  *
  * @param checkDate - The date to check (window ends on this day)
  * @param trips - Array of trips to count
- * @returns Number of absence days in the 365-day window
+ * @returns Number of absence days in the 12-month window
  */
 export function countInWindow(checkDate: Date, trips: Trip[]): number {
-  // Window: (checkDate - 365 days, checkDate]
-  const windowStart = new Date(
-    Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate() - WINDOW_DAYS),
-  );
+  // Window: (checkDate - 12 calendar months, checkDate]
+  const windowStart = windowStartFor(checkDate);
 
   const windowStartTime = windowStart.getTime();
   const checkDateTime = Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate());
 
-  // For open trips, cap at today's date (don't assume staying abroad until future checkDate)
-  const now = new Date();
-  const today = utcStartOfDay(now);
-  const openTripEndDate = checkDate.getTime() < today.getTime() ? checkDate : today;
+  // For open trips, assume the person stays abroad through checkDate.
+  // Pessimistic by design: a future-dated forecast while abroad should not
+  // silently assume you fly home today. Use --return-date to model a
+  // planned return instead.
+  const openTripEndDate = checkDate;
 
   let totalDays = 0;
 
   for (const trip of trips) {
     // Get all absence dates for this trip
-    // For open trips, use the earlier of checkDate or today
+    // For open trips, project through the checkDate being evaluated
     const effectiveAsOf = trip.arrival === null ? openTripEndDate : checkDate;
     const absenceDates = getAbsenceDates(trip.departure, trip.arrival, effectiveAsOf);
 
@@ -186,10 +210,11 @@ export function simulateContinuousTrip(startDate: Date, trips: Trip[], maxSimula
     const allTrips = [...completedTrips, hypotheticalTrip];
     const usedDays = countInWindow(simDate, allTrips);
 
-    if (usedDays >= ABSENCE_LIMIT) {
-      // The day before is the last safe day
-      // Absence days for a trip are (dep, arr) exclusive
-      // So if we hit limit on day N, we can stay N-1 full days
+    if (usedDays > ABSENCE_LIMIT) {
+      // The rule is "must not spend MORE than 180 days" abroad, so a window
+      // containing exactly 180 absence days is still legal. Only a window
+      // that EXCEEDS the limit breaks continuous residence.
+      // The day before is the last safe day.
       return {
         hitLimitDate: simDate,
         maxDays: day - 1,

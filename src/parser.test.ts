@@ -244,6 +244,10 @@ arr 1/5/25   # arrive back
     expect(() => parseTrips('dep 1/1/25\ndep 1/2/25\narr 1/3/25')).toThrow('only valid for the last trip');
   });
 
+  test('rejects two trailing unmatched departures', () => {
+    expect(() => parseTrips('dep 1/1/25\narr 1/5/25\ndep 2/1/25\ndep 3/1/25')).toThrow('only valid for the last trip');
+  });
+
   test('throws ParseError with line number', () => {
     try {
       parseTrips('dep 1/1/25\narr invalid\ndep 2/2/25');
